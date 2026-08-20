@@ -1,13 +1,13 @@
 import { createClient } from "@supabase/supabase-js";
 import type { ToxinType } from "../app/program";
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "https://fttiurrriwmenwlhkfbx.supabase.co";
+const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || "sb_publishable_BuUcB5uVXu18vW8iv-4Cyw_2hTaXTAk";
 
 export const isSupabaseConfigured = Boolean(supabaseUrl && supabaseKey);
 export const supabase = createClient(
-  supabaseUrl || "https://placeholder.supabase.co",
-  supabaseKey || "placeholder",
+  supabaseUrl,
+  supabaseKey,
 );
 
 type Profile = { displayName: string; toxinType: ToxinType; startDate: string };

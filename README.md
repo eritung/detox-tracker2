@@ -14,8 +14,7 @@
 ### 管理者設定
 
 1. 在 Supabase SQL Editor 執行 `supabase/schema.sql`。
-2. 在 GitHub repository secrets 新增 `VITE_SUPABASE_URL` 與 `VITE_SUPABASE_ANON_KEY`。
-3. 在 GitHub Pages 將 Source 設定為 GitHub Actions。
+2. 在 GitHub Pages 將 Source 設定為 GitHub Actions。
 
 正式健康檢測：[IPWA 毒素類型問卷](https://www.ipwa.tw/questionnaire/toxin-type)
 
