@@ -22,21 +22,23 @@ function Root() {
 }
 
 function LoginScreen() {
-  const [email, setEmail] = useState("");
+  const [account, setAccount] = useState("");
   const [password, setPassword] = useState("");
-  const [mode, setMode] = useState<"login" | "signup">("login");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
 
   async function submit(event: FormEvent) {
     event.preventDefault(); setBusy(true); setMessage("");
-    const result = mode === "login" ? await supabase.auth.signInWithPassword({ email, password }) : await supabase.auth.signUp({ email, password, options: { data: { display_name: email.split("@")[0] } } });
-    if (result.error) setMessage(result.error.message === "Invalid login credentials" ? "信箱或密碼不正確" : result.error.message);
-    else if (mode === "signup" && !result.data.session) setMessage("請到信箱完成驗證，再回來登入。");
+    const normalizedAccount = account.trim().toLowerCase();
+    const result = await supabase.auth.signInWithPassword({
+      email: `${normalizedAccount}@fresh21.local`,
+      password,
+    });
+    if (result.error) setMessage("帳號或密碼不正確");
     setBusy(false);
   }
 
-  return <main className="auth-screen"><section className="auth-card"><div className="brand-mark">21</div><p className="eyebrow">FRESH START</p><h1>清新計畫</h1><p>登入後開始你的 21 天健康任務與身心紀錄。</p><form onSubmit={submit}><label>電子信箱<input type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} required /></label><label>密碼<input type="password" autoComplete={mode === "login" ? "current-password" : "new-password"} minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} required /></label>{message && <p className="auth-message" role="status">{message}</p>}<button className="primary-button full" disabled={busy}>{busy ? "請稍候…" : mode === "login" ? "登入" : "建立帳號"}</button></form><button className="text-button" onClick={() => { setMode(mode === "login" ? "signup" : "login"); setMessage(""); }}>{mode === "login" ? "第一次使用？建立帳號" : "已經有帳號？返回登入"}</button><small>每位 KOL 的紀錄彼此獨立，不會互相看見。</small></section></main>;
+  return <main className="auth-screen"><section className="auth-card"><div className="brand-mark">21</div><p className="eyebrow">FRESH START</p><h1>清新計畫</h1><p>請使用主辦單位提供的帳號密碼登入。</p><form onSubmit={submit}><label>帳號<input type="text" autoComplete="username" autoCapitalize="none" value={account} onChange={(e) => setAccount(e.target.value)} required /></label><label>密碼<input type="password" autoComplete="current-password" minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} required /></label>{message && <p className="auth-message" role="status">{message}</p>}<button className="primary-button full" disabled={busy}>{busy ? "請稍候…" : "登入"}</button></form><small>帳號由主辦單位統一建立，不開放自行註冊。</small></section></main>;
 }
 
 function SetupScreen() {
