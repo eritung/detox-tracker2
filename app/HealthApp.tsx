@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { getDayTasks, moodOptions, toxinTypes, type ToxinType } from "./program";
+import { loadAppData, saveCheckinData, saveProfileData } from "../src/supabase";
 
 type Profile = { displayName: string; toxinType: ToxinType; startDate: string };
 type Checkin = { day: number; completed: string[]; sleepAt: string; wakeAt: string; morningMood: string; morningNote: string; eveningMood: string; eveningNote: string };
@@ -10,7 +11,7 @@ type Tab = "today" | "plan" | "journal" | "profile";
 const emptyCheckin = (day: number): Checkin => ({ day, completed: [], sleepAt: "23:00", wakeAt: "07:00", morningMood: "", morningNote: "", eveningMood: "", eveningNote: "" });
 const assessmentUrl = "https://www.ipwa.tw/questionnaire/toxin-type";
 
-export default function HealthApp({ signedInName, signedIn }: { signedInName: string; signedIn: boolean }) {
+export default function HealthApp({ signedInName, onSignOut }: { signedInName: string; onSignOut: () => void }) {
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [day, setDay] = useState(1);
@@ -26,7 +27,7 @@ export default function HealthApp({ signedInName, signedIn }: { signedInName: st
   const [toast, setToast] = useState("");
 
   useEffect(() => {
-    fetch("/api/app").then((r) => r.json()).then((data) => {
+    loadAppData().then((data) => {
       if (data.profile) {
         setProfile(data.profile);
         setDay(data.currentDay ?? 1);
@@ -37,7 +38,7 @@ export default function HealthApp({ signedInName, signedIn }: { signedInName: st
 
   useEffect(() => {
     if (!profile) return;
-    fetch(`/api/app?day=${day}`).then((r) => r.json()).then((data) => setCheckin(data.checkin ?? emptyCheckin(day))).catch(() => setCheckin(emptyCheckin(day)));
+    loadAppData(day).then((data) => setCheckin(data.checkin ?? emptyCheckin(day))).catch(() => setCheckin(emptyCheckin(day)));
   }, [day, profile]);
 
   const tasks = useMemo(() => getDayTasks(day, profile?.toxinType ?? selectedType), [day, profile, selectedType]);
@@ -51,8 +52,7 @@ export default function HealthApp({ signedInName, signedIn }: { signedInName: st
     setSaving(true);
     const next = { displayName: displayName.trim(), toxinType: selectedType, startDate };
     try {
-      const response = await fetch("/api/app", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "profile", ...next }) });
-      if (!response.ok) throw new Error();
+      await saveProfileData(next);
       setProfile(next); setDay(1); setCheckin(emptyCheckin(1)); setOnboarding(false); showToast("你的 21 天計畫已開啟！");
     } catch { showToast("目前無法儲存，請稍後再試"); } finally { setSaving(false); }
   }
@@ -60,8 +60,7 @@ export default function HealthApp({ signedInName, signedIn }: { signedInName: st
   async function persist(next: Checkin, message = "已儲存今日紀錄") {
     setCheckin(next); setSaving(true);
     try {
-      const response = await fetch("/api/app", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "checkin", ...next }) });
-      if (!response.ok) throw new Error();
+      await saveCheckinData(next);
       showToast(message);
     } catch { showToast("儲存失敗，請再試一次"); } finally { setSaving(false); }
   }
@@ -79,7 +78,7 @@ export default function HealthApp({ signedInName, signedIn }: { signedInName: st
     <main className="app-shell">
       <header className="topbar">
         <button className="brand brand-button" onClick={() => setTab("today")}><span className="brand-mark">21</span><span>清新計畫</span></button>
-        <div className="header-actions"><span className={`access-pill ${signedIn ? "secure" : "preview"}`}>{signedIn ? "已安全登入" : "預覽模式"}</span><button className="avatar" onClick={() => setTab("profile")} aria-label="開啟個人資料">{(profile?.displayName ?? signedInName).slice(0, 1)}</button></div>
+        <div className="header-actions"><span className="access-pill secure">已安全登入</span><button className="avatar" onClick={() => setTab("profile")} aria-label="開啟個人資料">{(profile?.displayName ?? signedInName).slice(0, 1)}</button></div>
       </header>
 
       <section className="content">
@@ -95,7 +94,7 @@ export default function HealthApp({ signedInName, signedIn }: { signedInName: st
 
         {tab === "plan" && profile && <PlanView day={day} setDay={(value) => { setDay(value); setTab("today"); }} toxinType={profile.toxinType} />}
         {tab === "journal" && profile && <JournalView checkin={checkin} day={day} onEdit={() => setCheckinOpen(true)} />}
-        {tab === "profile" && profile && <ProfileView profile={profile} signedIn={signedIn} onRestart={() => { setSelectedType(profile.toxinType); setDisplayName(profile.displayName); setStartDate(profile.startDate); setOnboardingStep(1); setOnboarding(true); }} />}
+        {tab === "profile" && profile && <ProfileView profile={profile} onSignOut={onSignOut} onRestart={() => { setSelectedType(profile.toxinType); setDisplayName(profile.displayName); setStartDate(profile.startDate); setOnboardingStep(1); setOnboarding(true); }} />}
         <p className="health-note">本工具用於課程體驗與生活紀錄，不取代專業醫療建議。若身體不適，請尋求合格醫療專業人員協助。</p>
       </section>
 
@@ -123,5 +122,5 @@ function MoodField({ label, value, onChange }: { label: string; value: string; o
 
 function PlanView({ day, setDay, toxinType }: { day: number; setDay: (value: number) => void; toxinType: ToxinType }) { return <section className="view-page"><p className="eyebrow">21-DAY ROADMAP</p><h1>你的完整計畫</h1><p className="subtitle">三週循序漸進：先避開、再導入，最後建立適合 {toxinType} 的維持節奏。</p><div className="week-overview"><article><span>01</span><h3>避開期</h3><p>避開精緻糖與高加工食物，建立排毒、呼吸與早晚功課。</p></article><article><span>02</span><h3>導入期</h3><p>加入低 GI 全穀、優蛋白、好油與更完整的運動節奏。</p></article><article><span>03</span><h3>維持期</h3><p>加入 {toxinType} 亮點食材，重新檢視並調整策略。</p></article></div><div className="calendar-grid">{Array.from({ length: 21 }, (_, i) => i + 1).map((value) => <button key={value} className={value === day ? "active" : ""} onClick={() => setDay(value)}><small>DAY</small><strong>{value}</strong><span>{value <= day ? "✓" : "•"}</span></button>)}</div></section>; }
 function JournalView({ checkin, day, onEdit }: { checkin: Checkin; day: number; onEdit: () => void }) { const morning = moodOptions.find((m) => m.value === checkin.morningMood); const evening = moodOptions.find((m) => m.value === checkin.eveningMood); return <section className="view-page"><p className="eyebrow">MY JOURNAL</p><h1>身心紀錄</h1><p className="subtitle">看見自己的感受，是照顧自己的第一步。</p><article className="journal-card"><div className="journal-date"><strong>Day {day}</strong><span>{checkin.sleepAt} 入睡 · {checkin.wakeAt} 起床</span></div><div className="journal-moods"><section><span>{morning?.emoji ?? "○"}</span><div><small>起床感受</small><strong>{morning?.label ?? "尚未記錄"}</strong><p>{checkin.morningNote || "還沒有留下文字。"}</p></div></section><section><span>{evening?.emoji ?? "○"}</span><div><small>睡前感受</small><strong>{evening?.label ?? "尚未記錄"}</strong><p>{checkin.eveningNote || "還沒有留下文字。"}</p></div></section></div><button className="secondary-button" onClick={onEdit}>編輯 Day {day} 紀錄</button></article></section>; }
-function ProfileView({ profile, signedIn, onRestart }: { profile: Profile; signedIn: boolean; onRestart: () => void }) { return <section className="view-page"><p className="eyebrow">MY PLAN</p><h1>{profile.displayName}的清新計畫</h1><div className="profile-card"><div className="profile-orb">{typeEmoji(profile.toxinType)}</div><div><small>目前計畫</small><h2>{profile.toxinType}</h2><p>開始日期：{profile.startDate}</p></div></div><div className="settings-list"><div><span>🔐</span><p><strong>{signedIn ? "帳號已受保護" : "目前為預覽模式"}</strong><small>{signedIn ? "使用 ChatGPT 帳號安全登入" : "正式部署後將要求登入"}</small></p></div><button onClick={onRestart}><span>🧭</span><p><strong>重新選擇毒型</strong><small>重新做檢測或調整你的結果</small></p><b>›</b></button><a href={assessmentUrl} target="_blank" rel="noreferrer"><span>↗</span><p><strong>再次前往線上檢測</strong><small>將在新分頁開啟</small></p><b>›</b></a></div></section>; }
+function ProfileView({ profile, onRestart, onSignOut }: { profile: Profile; onRestart: () => void; onSignOut: () => void }) { return <section className="view-page"><p className="eyebrow">MY PLAN</p><h1>{profile.displayName}的清新計畫</h1><div className="profile-card"><div className="profile-orb">{typeEmoji(profile.toxinType)}</div><div><small>目前計畫</small><h2>{profile.toxinType}</h2><p>開始日期：{profile.startDate}</p></div></div><div className="settings-list"><div><span>🔐</span><p><strong>帳號已受保護</strong><small>使用 Supabase 信箱與密碼安全登入</small></p></div><button onClick={onRestart}><span>🧭</span><p><strong>重新選擇毒型</strong><small>重新做檢測或調整你的結果</small></p><b>›</b></button><a href={assessmentUrl} target="_blank" rel="noreferrer"><span>↗</span><p><strong>再次前往線上檢測</strong><small>將在新分頁開啟</small></p><b>›</b></a><button onClick={onSignOut}><span>↪</span><p><strong>登出帳號</strong><small>安全結束這次使用</small></p><b>›</b></button></div></section>; }
 function typeEmoji(type: ToxinType) { return ({ 斷醣型: "🍬", 淨肝型: "🌱", 微菌型: "🦠", 氧化型: "🫐", 壓力型: "🌬️", 免疫型: "🛡️" } as Record<ToxinType, string>)[type]; }
